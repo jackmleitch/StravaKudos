@@ -32,20 +32,25 @@ param = {'per_page': 200, 'page': page_num}
 my_dataset = requests.get(activites_url, headers=header, params=param).json()
 activities = json_normalize(my_dataset)
 
+# print(activities.start_date[0])
+
 # loop over pages until request fails
 while True:
     page_num += 1
 
-    if page_num % 10 == 0:
+    if page_num % 5 == 0:
         print(f"Now extracting page number {page_num}")
 
     param = {'per_page': 200, 'page': page_num}
     my_dataset = requests.get(activites_url, headers=header, params=param).json()
     if my_dataset:
         new_activities = json_normalize(my_dataset)
-        activities.append(new_activities)
+        # activities.append(new_activities)
+        activities = activities.append(new_activities, ignore_index = True)
+
     else:
         break
+
 
 # save activities df to input folder
 activities.to_csv('./input/strava_activities.csv')
