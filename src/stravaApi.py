@@ -7,16 +7,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from pandas import json_normalize
 
+import config
+
 auth_url = "https://www.strava.com/oauth/token"
 activites_url = "https://www.strava.com/api/v3/athlete/activities"
 
-payload = {
-    "client_id": "50446",
-    "client_secret": "7955204b7285824280b5b30af6361996b414dc9f",
-    "refresh_token": "3d26f702b60d42195b267cd4029ed958143cb250",
-    "grant_type": "refresh_token",
-    "f": "json",
-}
+payload = config.STRAVA_API
 
 # check if there is a new request token
 print("Requesting Token...")
