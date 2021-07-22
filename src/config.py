@@ -6,9 +6,9 @@ STRAVA_API = {
     "f": "json",
 }
 
-BASE_DATA_PATH = "/Users/Jack/Documents/Projects/StravaKudos/"
-STRAVA_DATA_PATH = (
-    "/Users/Jack/Documents/Projects/StravaKudos/input/strava_activities.csv"
-)
-STRAVA_TRAIN_PATH = BASE_DATA_PATH + "input/data_train.csv"
-STRAVA_TEST_PATH = BASE_DATA_PATH + "input/data_test.csv"
+STRAVA_DATA_PATH = "./input/strava_activities.csv"
+STRAVA_TRAIN_PATH = "./input/data_train.csv"
+STRAVA_TEST_PATH = "./input/data_test.csv"
+
+LINUX_PATH = "/home/jack/projects/StravaKudos/"
+OS_PATH = "/Users/Jack/Documents/Projects/StravaKudos/"
