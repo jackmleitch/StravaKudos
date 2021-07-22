@@ -5,3 +5,5 @@ __pycache__/
 src/config.py
 logs.log
 notebooks/logs.log
+notebooks/.ipynb_checkpoints
+notebooks/logs.log
