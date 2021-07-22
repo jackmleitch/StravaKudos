@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import datetime
 import re
+import polyline
+import matplotlib.pyplot as plt
 
 import config
 
@@ -41,6 +43,56 @@ def format_timezone(df, column_name="timezone"):
     return df
 
 
+def area_enclosed_by_run(poly, display=False):
+    """
+    Calculated the area enclosed by runs gps trace.
+    :param poly: polyline from gps trace
+    :param display: bool, True outputs a plot of gps trace
+    :return: area enclosed 
+    """
+
+    def computeArea(pos):
+        x, y = zip(*pos)
+        return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
+
+    if isinstance(poly, str):
+        poly_decoded = polyline.decode(poly)
+        lat, lon = list(zip(*poly_decoded))
+        lat, lon = list(lat), list(lon)
+        if display:
+            fig = plt.figure(figsize=(12, 12))
+            fig.suptitle("Strava Activity polymap")
+            ax = plt.Axes(fig, [0.0, 0.0, 1.0, 1.0],)
+            ax.set_aspect("equal")
+            ax.set_axis_off()
+            fig.add_axes(ax)
+            ax.plot(lon, lat, lw=0.5, alpha=0.9)
+            ax.fill(lon, lat)
+            polygon = ax.fill(lon, lat)
+        else:
+            # pyplot.fill(a, b) will return a list of matplotlib.patches.Polygon.
+            polygon = plt.fill(lon, lat)
+            plt.close()
+        area = computeArea(polygon[0].xy) * 100000
+
+    else:
+        area = 0
+
+    return area
+
+
+def get_poly_areas(df, column_name="map.summary_polyline"):
+    """
+    :param df: dataframe that needs timezone column formatted 
+    :param column_name: column name that contains polylines 
+    :return: run gps area
+    """
+
+    df["run_area"] = df[column_name].apply(lambda x: area_enclosed_by_run(x))
+    df = df.drop(column_name, axis=1)
+    return df
+
+
 if __name__ == "__main__":
     # load in initial data gathered from the Strava API
     data_path = config.STRAVA_DATA_PATH
@@ -73,7 +125,6 @@ if __name__ == "__main__":
         "athlete.id",
         "athlete.resource_state",
         "map.id",
-        "map.summary_polyline",
         "map.resource_state",
         "device_watts",
         "average_watts",
@@ -97,6 +148,7 @@ if __name__ == "__main__":
     )
     data_init = format_date(data_init)
     data_init = format_timezone(data_init)
+    data_init = get_poly_areas(data_init)
 
     # convert distance in meters to kilometers
     data_init.loc[:, "distance"] = data_init.distance / 1000
