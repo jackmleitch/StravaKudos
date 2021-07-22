@@ -13,6 +13,12 @@ import config
 
 
 def race_heuristic(strava_caption, workout_type):
+    """
+    Filters through titles and if it contains a result from a race then labels it as race.
+    :param strava_caption: string, caption from strava workout
+    :param workout_type: int, type of workout
+    :return: new workout_type
+    """
     strava_caption = str(strava_caption)
     if re.findall(r"\b\d+th|\d+st|\d+rd|\d+nd\b", strava_caption):
         return 1
