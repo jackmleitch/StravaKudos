@@ -4,8 +4,15 @@ import datetime
 import re
 import polyline
 import matplotlib.pyplot as plt
+import pickle
+
+from sklearn.cluster import KMeans
+from geopy.geocoders import Nominatim
+from tqdm import tqdm
 
 import config
+
+tqdm.pandas()
 
 
 def format_date(df, column_name="start_date"):
@@ -88,8 +95,69 @@ def get_poly_areas(df, column_name="map.summary_polyline"):
     :return: run gps area
     """
 
-    df["run_area"] = df[column_name].apply(lambda x: area_enclosed_by_run(x))
+    df["run_area"] = df[column_name].progress_apply(lambda x: area_enclosed_by_run(x))
     df = df.drop(column_name, axis=1)
+    return df
+
+
+def apply_clustering(df):
+    """
+    :param df: dataframe that needs lat, lng column clustered 
+    :return: cluster
+    """
+    with open("models/cluster_latlng", "rb") as f:
+        cluster_latlng = pickle.load(f)
+
+    def apply_clustering_helper(lat, lng, cluster_model, num_clusters=6):
+        """
+        If there is a latitude and longitude predict the cluster. If not 
+        assign to a new cluster.
+        :param lat: start latitude of run
+        :param lng: start longitude of run 
+        :param cluster_model: KMeans clustering model fit on training data
+        :param num_clusters: used to assign new cluster to missing data 
+        :return: cluster assigned 
+        """
+        if not np.isnan(lat) and not np.isnan(
+            lng
+        ):  # and isinstance(lng, numbers.Number):
+            val = np.array([lat, lng]).reshape(1, 2)
+            cluster = cluster_model.predict(val)[0]
+        else:
+            cluster = num_clusters
+        return cluster
+
+    df["latlng_cluster"] = df.apply(
+        lambda row: apply_clustering_helper(
+            row["start_latitude"], row["start_longitude"], cluster_latlng
+        ),
+        axis=1,
+    )
+    return df
+
+
+def reverse_geocoder(df):
+    """
+    reverse geocode the lat, lng coordinates to find the city where the run was
+    :param df: dataframe to add new column too
+    :return: new dataframe with column 'city'
+    """
+
+    geolocator = Nominatim(user_agent="myGeocoder")
+    df["temp"] = df["start_latitude"].map(str) + "," + df["start_longitude"].map(str)
+
+    def reverse_geocode_helper(geom):
+        try:
+            location = geolocator.reverse(geom)
+            city = location.raw.get("address").get("city")
+            if not city:
+                city = location.raw.get("address").get("town")
+        except:
+            city = np.nan
+        return city
+
+    df["city"] = df["temp"].progress_apply(reverse_geocode_helper)
+    df = df.drop("temp", axis=1)
     return df
 
 
@@ -105,8 +173,8 @@ if __name__ == "__main__":
         "external_id",
         "upload_id",
         "utc_offset",
-        "start_latitude",
-        "start_longitude",
+        "start_latlng",
+        "end_latlng",
         "trainer",
         "commute",
         "visibility",
@@ -148,7 +216,11 @@ if __name__ == "__main__":
     )
     data_init = format_date(data_init)
     data_init = format_timezone(data_init)
+    print("Adding run area feature...")
     data_init = get_poly_areas(data_init)
+    data_init = apply_clustering(data_init)
+    print("Adding reverse geocoder feature...")
+    data_init = reverse_geocoder(data_init)
 
     # convert distance in meters to kilometers
     data_init.loc[:, "distance"] = data_init.distance / 1000
@@ -163,6 +235,7 @@ if __name__ == "__main__":
 
     data_train = data_init[int(data_init.shape[0] * test_frac) :]
     data_test = data_init[: int(data_init.shape[0] * test_frac)]
+
     print("train: ", data_train.shape)
     print("test: ", data_test.shape)
 
