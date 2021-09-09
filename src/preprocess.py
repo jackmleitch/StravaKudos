@@ -63,8 +63,8 @@ def uk_awake_feature(df):
         time_element = datetime.datetime.time(
             datetime.datetime.strptime(time_element, "%H:%M:%S")
         )
-        wake = datetime.time(6, 00, 00)
-        sleep = datetime.time(23, 59, 59)
+        wake = datetime.time(8, 00, 00)
+        sleep = datetime.time(22, 59, 59)
         return int(time_element > wake and time_element < sleep)
 
     df["is_uk_awake"] = df["GMT_time"].apply(lambda x: is_awake(x))
@@ -206,7 +206,7 @@ if __name__ == "__main__":
 
     # remove private activities and drop older activities
     data_init = (
-        data_init.loc[data_init.private == False].iloc[0:1001].drop("private", axis=1)
+        data_init.loc[data_init.private == False].iloc[0:1125].drop("private", axis=1)
     )
     data_init = format_date(data_init)
     data_init = format_timezone(data_init)
@@ -258,7 +258,8 @@ if __name__ == "__main__":
         "device_watts",
         "average_watts",
         "kilojoules",
-        "message",
+        "photo_count",
+        "athlete_count",
         "location_city",
         "location_state",
         "location_country",
@@ -267,6 +268,7 @@ if __name__ == "__main__":
         "start_latitude",
         "start_longitude",
     ]
+
     data_init = data_init.drop(cols_to_drop, axis=1)
 
     # split data into training and testing set
