@@ -28,9 +28,13 @@ def format_date(df, column_name="start_date"):
         day, time = date[0], date[1][:-1]
         return day, time
 
-    df["temp"] = df[column_name].apply(lambda x: format_date_helper(x))
-    df[["date", "time"]] = pd.DataFrame(df.temp.values.tolist(), index=df.index)
-    df = df.drop(["temp", "start_date", "start_date_local"], axis=1)
+    df["temp"] = df["start_date"].apply(lambda x: format_date_helper(x))
+    df["temp_local"] = df["start_date_local"].apply(lambda x: format_date_helper(x))
+    df[["GMT_date", "GMT_time"]] = pd.DataFrame(df.temp.values.tolist(), index=df.index)
+    df[["local_date", "local_time"]] = pd.DataFrame(
+        df.temp_local.values.tolist(), index=df.index
+    )
+    df = df.drop(["temp", "temp_local", "start_date", "start_date_local"], axis=1)
     return df
 
 
@@ -47,6 +51,36 @@ def format_timezone(df, column_name="timezone"):
         return timezone
 
     df[column_name] = df[column_name].apply(lambda x: format_timezone_helper(x))
+    return df
+
+
+def uk_awake_feature(df):
+    """
+    A binary feature to see if run was in U.K. awake hours or not
+    """
+
+    def is_awake(time_element):
+        time_element = datetime.datetime.time(
+            datetime.datetime.strptime(time_element, "%H:%M:%S")
+        )
+        wake = datetime.time(6, 00, 00)
+        sleep = datetime.time(23, 59, 59)
+        return int(time_element > wake and time_element < sleep)
+
+    df["is_uk_awake"] = df["GMT_time"].apply(lambda x: is_awake(x))
+    return df
+
+
+def generate_time_features(df):
+    # create time based features using date columns
+    df.loc[:, "datetime"] = pd.to_datetime(df["local_date"] + " " + df["local_time"])
+    df.loc[:, "year"] = df["datetime"].dt.year
+    df.loc[:, "weekofyear"] = df["datetime"].dt.isocalendar().week
+    df.loc[:, "month"] = df["datetime"].dt.month
+    df.loc[:, "dayofweek"] = df["datetime"].dt.dayofweek
+    df.loc[:, "weekend"] = (df.datetime.dt.weekday >= 5).astype(int)
+    df.loc[:, "hour"] = df["datetime"].dt.hour
+    df = uk_awake_feature(df)
     return df
 
 
@@ -166,6 +200,33 @@ if __name__ == "__main__":
     data_path = config.STRAVA_DATA_PATH
     data_init = pd.read_csv(data_path, index_col=0)
 
+    # filter out runs from activities and drop type column
+    data_init = data_init.loc[data_init.type == "Run"]
+    data_init = data_init.drop(columns=["type"])
+
+    # remove private activities and drop older activities
+    data_init = (
+        data_init.loc[data_init.private == False].iloc[0:1001].drop("private", axis=1)
+    )
+    data_init = format_date(data_init)
+    data_init = format_timezone(data_init)
+    data_init = generate_time_features(data_init)
+    print("Adding run area feature...")
+    data_init = get_poly_areas(data_init)
+    data_init = apply_clustering(data_init)
+    print("Adding reverse geocoder feature...")
+    data_init = reverse_geocoder(data_init)
+
+    # convert distance in meters to kilometers
+    data_init.loc[:, "distance"] = data_init.distance / 1000
+    # convert moving in seconds time to minutes
+    data_init.loc[:, "moving_time"] = data_init.moving_time / 60
+    # convert average speed in meters per second to minutes per kilometer
+    data_init.loc[:, "average_speed_mpk"] = 16.666 / data_init.average_speed
+    data_init = data_init.drop("average_speed", axis=1)
+    # remove runs with no kudos as it wasn't available to public
+    data_init = data_init[data_init.kudos_count != 0]
+
     # drop unwanted/useless columns from the dataset
     cols_to_drop = [
         "resource_state",
@@ -203,32 +264,10 @@ if __name__ == "__main__":
         "location_country",
         "comment_count",
         "elapsed_time",
+        "start_latitude",
+        "start_longitude",
     ]
     data_init = data_init.drop(cols_to_drop, axis=1)
-
-    # filter out runs from activities and drop type column
-    data_init = data_init.loc[data_init.type == "Run"]
-    data_init = data_init.drop(columns=["type"])
-
-    # remove private activities and drop older activities
-    data_init = (
-        data_init.loc[data_init.private == False].iloc[0:1001].drop("private", axis=1)
-    )
-    data_init = format_date(data_init)
-    data_init = format_timezone(data_init)
-    print("Adding run area feature...")
-    data_init = get_poly_areas(data_init)
-    data_init = apply_clustering(data_init)
-    print("Adding reverse geocoder feature...")
-    data_init = reverse_geocoder(data_init)
-
-    # convert distance in meters to kilometers
-    data_init.loc[:, "distance"] = data_init.distance / 1000
-    # convert moving in seconds time to minutes
-    data_init.loc[:, "moving_time"] = data_init.moving_time / 60
-    # convert average speed in meters per second to minutes per kilometer
-    data_init.loc[:, "average_speed_mpk"] = 16.666 / data_init.average_speed
-    data_init = data_init.drop("average_speed", axis=1)
 
     # split data into training and testing set
     test_frac = 0.25
