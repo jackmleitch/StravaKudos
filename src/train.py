@@ -51,5 +51,4 @@ def run(fold, model):
 
 
 if __name__ == "__main__":
-    numeric_cols = []
-    categorical_cols = []
+    
