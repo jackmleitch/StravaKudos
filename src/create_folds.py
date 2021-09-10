@@ -41,5 +41,6 @@ if __name__ == "__main__":
     data_train = pd.read_csv(data_train_path, index_col=0)
     # create folds
     df = create_folds(data_train)
+    # save new df with folds
     df.to_csv("input/data_train_kfold.csv")
     print("Folds created")
