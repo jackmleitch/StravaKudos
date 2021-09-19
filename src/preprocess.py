@@ -208,6 +208,10 @@ if __name__ == "__main__":
     data_init = (
         data_init.loc[data_init.private == False].iloc[0:1125].drop("private", axis=1)
     )
+    data_init["has_photo"] = data_init["total_photo_count"].map(
+        lambda x: 0 if x == 0 else 1
+    )
+
     data_init = format_date(data_init)
     data_init = format_timezone(data_init)
     data_init = generate_time_features(data_init)
