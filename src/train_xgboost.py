@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+import pickle
 
 from sklearn import metrics
 from sklearn import preprocessing
 from sklearn import impute
 from sklearn.pipeline import Pipeline
-from scipy.sparse import hstack
+from scipy.sparse import hstack, vstack
 
 import config
 
@@ -95,7 +96,16 @@ def run(fold):
     model = xgb.XGBRegressor(n_jobs=-1)
 
     # fit model on training data
-    model.fit(x_train, y_train)
+    eval_set = [(x_valid, y_valid)]
+    model.fit(
+        x_train,
+        y_train,
+        early_stopping_rounds=10,
+        eval_metric="rmse",
+        eval_set=eval_set,
+        verbose=False,
+    )
+    # model.fit(x_train, y_train)
 
     # predict on validation data
     valid_preds = model.predict(x_valid)
@@ -104,12 +114,16 @@ def run(fold):
     rmse = metrics.mean_squared_error(y_valid, valid_preds, squared=False)
     max_error = metrics.max_error(y_valid, valid_preds)
     print(f"\nFold = {fold}, rmse = {rmse}, max error = {max_error}")
-    return rmse
+
+    data = [x_train, y_train, x_valid, y_valid]
+
+    return rmse, model, data
 
 
 if __name__ == "__main__":
     scores = []
     for fold_ in range(3):
-        rmse = run(fold_)
+        rmse, _, _ = run(fold_)
         scores.append(rmse)
     print(f"\nAverage rmse = {sum(scores) / len(scores)}")
+
