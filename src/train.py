@@ -16,7 +16,7 @@ import config
 import model_dispatcher
 
 
-def run(fold, model):
+def run(fold, model, scale_features=False):
 
     # read training data with folds
     df = pd.read_csv(config.STRAVA_TRAIN_KFOLD_PATH)
@@ -67,7 +67,15 @@ def run(fold, model):
     y_valid = df_valid.kudos_count.values
 
     # pipelines for model transformation
-    num_pipeline = Pipeline([("imputer", impute.SimpleImputer(strategy="median"))])
+    if scale_features:
+        num_pipeline = Pipeline(
+            [
+                ("imputer", impute.SimpleImputer(strategy="median")),
+                ("std_scaler", preprocessing.StandardScaler()),
+            ]
+        )
+    else:
+        num_pipeline = Pipeline([("imputer", impute.SimpleImputer(strategy="median"))])
 
     cat_pipeline = Pipeline(
         [("cat", preprocessing.OneHotEncoder(handle_unknown="ignore"))]
@@ -101,10 +109,9 @@ def run(fold, model):
     x_valid = hstack((x_valid_num, x_valid_cat), format="csr")
 
     # initialize model
-    model = model_dispatcher.tree_models[model]
+    model = model_dispatcher.models[model]
 
     # fit model on training data
-    eval_set = [(x_valid, y_valid)]
     model.fit(x_train, y_train)
 
     # predict on validation data
@@ -124,12 +131,13 @@ if __name__ == "__main__":
     # initialize ArgumentParser class of argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str)
+    parser.add_argument("--scale", type=bool)
     args = parser.parse_args()
 
     scores = []
     print(f"\nTraining {args.model} model")
     for fold_ in range(3):
-        rmse, _, _ = run(fold_, model=args.model)
+        rmse, _, _ = run(fold_, model=args.model, scale_features=args.scale)
         scores.append(rmse)
     print(f"Average rmse for {args.model} = {sum(scores) / len(scores)}")
 
