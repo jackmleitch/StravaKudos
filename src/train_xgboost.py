@@ -8,6 +8,7 @@ from sklearn import preprocessing
 from sklearn import impute
 from sklearn.pipeline import Pipeline
 from scipy.sparse import hstack, vstack
+from imblearn.over_sampling import SMOTENC
 
 import config
 
@@ -40,6 +41,9 @@ def run(fold):
         "latlng_cluster",
         "city",
         "has_photo",
+        "run_per_day",
+        "max_run",
+        "is_named",
     ]
 
     ordinal_cols = ["hour", "pr_count"]
@@ -54,6 +58,7 @@ def run(fold):
     # training data is where kfold is not equal to fold
     df_train = df[df.kfold != fold].reset_index(drop=True)
     y_train = df_train.kudos_count.values
+
     # validation data is where kfold = fold
     df_valid = df[df.kfold == fold].reset_index(drop=True)
     y_valid = df_valid.kudos_count.values
