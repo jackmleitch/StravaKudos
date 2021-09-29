@@ -195,6 +195,38 @@ def reverse_geocoder(df):
     return df
 
 
+def label_name(row):
+    default_names = [
+        "Morning Run",
+        "Lunch Run",
+        "Afternoon Run",
+        "Evening Run",
+        "Night Run",
+    ]
+    if row["name"] in default_names:
+        return 0
+    else:
+        return 1
+
+
+def label_max(row, max_dist):
+    if (
+        row["distance"]
+        == max_dist[max_dist.local_date == row["local_date"]].max_distance.values[0]
+    ):
+        return 1
+    else:
+        return 0
+
+
+def race_heuristic(strava_caption, workout_type):
+    strava_caption = str(strava_caption)
+    if re.findall(r"\b\d+th|\d+st|\d+rd|\d+nd\b", strava_caption):
+        return 1
+    else:
+        return workout_type
+
+
 if __name__ == "__main__":
     # load in initial data gathered from the Strava API
     data_path = config.STRAVA_DATA_PATH
@@ -204,16 +236,39 @@ if __name__ == "__main__":
     data_init = data_init.loc[data_init.type == "Run"]
     data_init = data_init.drop(columns=["type"])
 
+    # add race heuristics
+    data_init["workout_type"] = data_init.apply(
+        lambda row: race_heuristic(row["name"], row["workout_type"]), axis=1
+    )
+
     # remove private activities and drop older activities
     data_init = (
         data_init.loc[data_init.private == False].iloc[0:1125].drop("private", axis=1)
     )
+    # map photo feature
     data_init["has_photo"] = data_init["total_photo_count"].map(
         lambda x: 0 if x == 0 else 1
     )
 
+    # label names
+    data_init.loc[:, "is_named"] = data_init.apply(lambda row: label_name(row), axis=1)
+
     data_init = format_date(data_init)
     data_init = format_timezone(data_init)
+
+    # get runs per day feature
+    counts = data_init.groupby("local_date").size().reset_index(name="run_per_day")
+    data_init = pd.merge(data_init, counts, on=["local_date"], how="inner")
+
+    # longest run of day
+    max_dist = (
+        data_init.groupby("local_date")["distance"]
+        .agg("max")
+        .reset_index(name="max_distance")
+    )
+    data_init.loc[:, "max_run"] = data_init.apply(
+        lambda row: label_max(row, max_dist), axis=1
+    )
     data_init = generate_time_features(data_init)
     print("Adding run area feature...")
     data_init = get_poly_areas(data_init)
