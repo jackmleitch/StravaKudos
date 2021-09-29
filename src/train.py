@@ -1,18 +1,22 @@
+import os
+import argparse
 import pandas as pd
 import numpy as np
+import xgboost as xgb
+import pickle
 
 from sklearn import metrics
 from sklearn import preprocessing
 from sklearn import impute
 from sklearn.pipeline import Pipeline
-from scipy.sparse import hstack
-
-from sklearn.ensemble import RandomForestRegressor
+from scipy.sparse import hstack, vstack
+from imblearn.over_sampling import SMOTENC
 
 import config
+import model_dispatcher
 
 
-def run(fold):
+def run(fold, model):
 
     # read training data with folds
     df = pd.read_csv(config.STRAVA_TRAIN_KFOLD_PATH)
@@ -40,6 +44,9 @@ def run(fold):
         "latlng_cluster",
         "city",
         "has_photo",
+        "run_per_day",
+        "max_run",
+        "is_named",
     ]
 
     ordinal_cols = ["hour", "pr_count"]
@@ -54,6 +61,7 @@ def run(fold):
     # training data is where kfold is not equal to fold
     df_train = df[df.kfold != fold].reset_index(drop=True)
     y_train = df_train.kudos_count.values
+
     # validation data is where kfold = fold
     df_valid = df[df.kfold == fold].reset_index(drop=True)
     y_valid = df_valid.kudos_count.values
@@ -92,10 +100,11 @@ def run(fold):
     x_train = hstack((x_train_num, x_train_cat), format="csr")
     x_valid = hstack((x_valid_num, x_valid_cat), format="csr")
 
-    # initialize xgboost model
-    model = RandomForestRegressor()
+    # initialize model
+    model = model_dispatcher.tree_models[model]
 
     # fit model on training data
+    eval_set = [(x_valid, y_valid)]
     model.fit(x_train, y_train)
 
     # predict on validation data
@@ -104,13 +113,23 @@ def run(fold):
     # get rmse, and mape
     rmse = metrics.mean_squared_error(y_valid, valid_preds, squared=False)
     max_error = metrics.max_error(y_valid, valid_preds)
-    print(f"\nFold = {fold}, rmse = {rmse}, max error = {max_error}")
-    return rmse
+    print(f"Fold = {fold}, rmse = {rmse}, max error = {max_error}")
+
+    data = [x_train, y_train, x_valid, y_valid]
+
+    return rmse, model, data
 
 
 if __name__ == "__main__":
+    # initialize ArgumentParser class of argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", type=str)
+    args = parser.parse_args()
+
     scores = []
+    print(f"\nTraining {args.model} model")
     for fold_ in range(3):
-        rmse = run(fold_)
+        rmse, _, _ = run(fold_, model=args.model)
         scores.append(rmse)
-    print(f"\nAverage rmse = {sum(scores) / len(scores)}")
+    print(f"Average rmse for {args.model} = {sum(scores) / len(scores)}")
+
