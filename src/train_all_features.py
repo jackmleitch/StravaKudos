@@ -10,6 +10,7 @@ from sklearn import preprocessing
 from sklearn import impute
 from sklearn.pipeline import Pipeline
 from scipy.sparse import hstack, vstack
+from imblearn.over_sampling import SMOTENC
 
 import config
 import model_dispatcher
@@ -20,25 +21,41 @@ def run(fold, model, scale_features=False):
     # read training data with folds
     df = pd.read_csv(config.STRAVA_TRAIN_KFOLD_PATH)
 
-    # list all features
+    # list all numeric features
     num_cols = [
         "distance",
-        "average_speed_mpk",
-        "suffer_score",
-        "max_speed",
         "moving_time",
-        "max_heartrate",
         "total_elevation_gain",
+        "max_speed",
+        "average_heartrate",
+        "max_heartrate",
+        "suffer_score",
         "run_area",
+        "average_speed_mpk",
     ]
 
-    cat_cols = ["max_run", "workout_type", "is_named", "run_per_day"]
+    cat_cols = [
+        "workout_type",
+        "timezone",
+        "manual",
+        "dayofweek",
+        "weekend",
+        "is_uk_awake",
+        "latlng_cluster",
+        "city",
+        "has_photo",
+        "run_per_day",
+        "max_run",
+        "is_named",
+    ]
+
+    ordinal_cols = ["hour", "pr_count", "hour_binned"]
 
     # all cols are features except for target and kfold
-    features = num_cols + cat_cols
+    features = num_cols + cat_cols + ordinal_cols
 
     # fill cat column NaN values with NONE
-    for col in cat_cols:
+    for col in cat_cols + ordinal_cols:
         df.loc[:, col] = df[col].astype(str).fillna("NONE")
 
     # training data is where kfold is not equal to fold
@@ -66,9 +83,9 @@ def run(fold, model, scale_features=False):
 
     # transforms columns and drops columns not specified
     x_train_num = num_pipeline.fit_transform(df_train[num_cols])
-    x_train_cat = cat_pipeline.fit_transform(df_train[cat_cols])
+    x_train_cat = cat_pipeline.fit_transform(df_train[cat_cols + ordinal_cols])
     x_valid_num = num_pipeline.transform(df_valid[num_cols])
-    x_valid_cat = cat_pipeline.transform(df_valid[cat_cols])
+    x_valid_cat = cat_pipeline.transform(df_valid[cat_cols + ordinal_cols])
 
     # check shapes are the same
     assert (

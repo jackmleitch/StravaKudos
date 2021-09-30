@@ -227,6 +227,20 @@ def race_heuristic(strava_caption, workout_type):
         return workout_type
 
 
+def map_time_of_day(hour):
+    if hour in [6, 7, 8, 9, 10]:
+        return "AM"
+
+    elif hour in [11, 12, 13, 14, 15]:
+        return "Mid"
+
+    elif hour in [16, 17, 18, 19, 20]:
+        return "PM"
+
+    else:
+        return "Night"
+
+
 if __name__ == "__main__":
     # load in initial data gathered from the Strava API
     data_path = config.STRAVA_DATA_PATH
@@ -270,6 +284,8 @@ if __name__ == "__main__":
         lambda row: label_max(row, max_dist), axis=1
     )
     data_init = generate_time_features(data_init)
+    data_init["hour_binned"] = data_init["hour"].apply(map_time_of_day)
+
     print("Adding run area feature...")
     data_init = get_poly_areas(data_init)
     data_init = apply_clustering(data_init)
