@@ -14,9 +14,7 @@ warnings.warn = warn
 
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import mean_squared_error, max_error
-
-# import config
+from sklearn.metrics import mean_squared_error
 
 
 def train():
@@ -44,15 +42,19 @@ def train():
     # select only needed cols
     df = df[["kudos_count"] + features]
 
+    # fill in NAs in cat columns with NONE
+    for col in cat_cols:
+        df.loc[:, col] = df[col].astype(str).fillna("NONE")
+
     # split data into test and training
     # randomize the rows of the data
-    df = df.sample(frac=1).reset_index(drop=True)
+    df = df.sample(frac=1, random_state=42).reset_index(drop=True)
     # Sturge's rule to calc bins
     num_bins = int(np.floor(1 + np.log2(len(df))))
     # bin targets
     df.loc[:, "bins"] = pd.cut(df["kudos_count"], bins=num_bins, labels=False)
-    # initiate kfold class, 5 splits gives valid size 1/5 = 20%
-    kf = StratifiedKFold(n_splits=5)
+    # initiate kfold class, 5 splits gives valid size 1/4 = 25%
+    kf = StratifiedKFold(n_splits=4, random_state=42)
     # get indicies for train and valid set
     train_idx, valid_idx = next(iter(kf.split(X=df, y=df.bins.values)))
     # drop bins col
@@ -62,21 +64,19 @@ def train():
     df_valid = df.loc[valid_idx, :]
     print(f"Training shape: {df_train.shape} \nValidation shape: {df_valid.shape}")
 
-    # fill in NAs in cat columns with NONE
-    for col in cat_cols:
-        df.loc[:, col] = df[col].astype(str).fillna("NONE")
-
     # we label encode all the features
     for col in cat_cols:
         # initialise label encoder
         lbl = LabelEncoder()
-        # fit label encoder
-        lbl.fit(df[col])
+        # fit label encoder on training data
+        lbl.fit(df_train[col])
+        encodings = dict(zip(lbl.classes_, lbl.transform(lbl.classes_)))
         # transform all of the data
-        df.loc[:, col] = lbl.transform(df[col])
+        df_train.loc[:, col] = lbl.transform(df_train[col])
+        df_valid.loc[:, col] = lbl.transform(df_valid[col])
         # save each encoder
         with open(f"models/production/label_encoders/lbl_enc_{col}.pickle", "wb") as f:
-            pickle.dump(lbl, f)
+            pickle.dump(encodings, f)
 
     # get target encodings
     target_encodings = {}
@@ -93,6 +93,7 @@ def train():
         pickle.dump(target_encodings, f)
 
     # get training matrix and y vectors
+    features = [f for f in df_train.columns if f not in ("kudos_count")]
     x_train = df_train[features].values
     y_train = df_train.kudos_count.values
     x_valid = df_valid[features].values
@@ -114,8 +115,11 @@ def train():
     valid_preds = model.predict(x_valid)
     # get rmse, and max_error
     rmse = mean_squared_error(y_valid, valid_preds, squared=False)
-    print(f"Rmse = {rmse}")
+    rmse_train = mean_squared_error(y_train, model.predict(x_train), squared=False)
+    print(f"Rmse valid = {rmse}")
+    print(f"Rmse train = {rmse_train}")
 
 
 if __name__ == "__main__":
     train()
+    # df[your_col] = df[your_col].apply(lambda x: le_dict.get(x, <unknown_value>))

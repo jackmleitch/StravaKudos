@@ -10,13 +10,11 @@ from sklearn.pipeline import Pipeline
 from scipy.sparse import hstack, vstack
 from imblearn.over_sampling import SMOTENC
 
-import config
-
 
 def run(fold):
 
     # read training data with folds
-    df = pd.read_csv(config.STRAVA_TRAIN_KFOLD_PATH)
+    df = pd.read_csv("input/data_train_kfold.csv")
 
     # list all numeric features
     num_cols = [
