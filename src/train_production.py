@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import xgboost as xgb
 import pickle
 
 
@@ -13,6 +14,7 @@ warnings.warn = warn
 
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import mean_squared_error, max_error
 
 # import config
 
@@ -22,6 +24,25 @@ def train():
     # read in the data
     STRAVA_TRAIN_PATH = "input/data_train.csv"
     df = pd.read_csv(STRAVA_TRAIN_PATH)
+
+    # get features we need
+    # list of numerical columns
+    num_cols = [
+        "distance",
+        "average_speed_mpk",
+        "suffer_score",
+        "max_speed",
+        "moving_time",
+        "max_heartrate",
+        "total_elevation_gain",
+        "run_area",
+    ]
+    # list of categorical columns
+    cat_cols = ["max_run", "workout_type", "is_named", "run_per_day"]
+    # all cols are features except for target
+    features = num_cols + cat_cols
+    # select only needed cols
+    df = df[["kudos_count"] + features]
 
     # split data into test and training
     # randomize the rows of the data
@@ -40,25 +61,6 @@ def train():
     df_train = df.loc[train_idx, :]
     df_valid = df.loc[valid_idx, :]
     print(f"Training shape: {df_train.shape} \nValidation shape: {df_valid.shape}")
-
-    # list of numerical columns
-    num_cols = [
-        "distance",
-        "average_speed_mpk",
-        "suffer_score",
-        "max_speed",
-        "moving_time",
-        "max_heartrate",
-        "total_elevation_gain",
-        "run_area",
-    ]
-    # list of categorical columns
-    cat_cols = ["max_run", "workout_type", "is_named", "run_per_day"]
-    # all cols are features except for target
-    features = num_cols + cat_cols
-
-    # select only needed cols
-    df = df[["kudos_count"] + features]
 
     # fill in NAs in cat columns with NONE
     for col in cat_cols:
@@ -83,11 +85,36 @@ def train():
         # create dict of category:mean_target
         mapping_dict = dict(df_train.groupby(col)["kudos_count"].mean())
         target_encodings[col] = mapping_dict
+        # column_enc is the new column we have with mean encodings
+        df_train.loc[:, col + "_enc"] = df_train[col].map(mapping_dict)
+        df_valid.loc[:, col + "_enc"] = df_valid[col].map(mapping_dict)
     # save target encodings
     with open("models/production/target_encodings/target_enc.pickle", "wb") as f:
         pickle.dump(target_encodings, f)
-    # column_enc is the new column we have with mean encodings
-    # df_valid.loc[:, col + "_enc"] = df_valid[col].map(mapping_dict)
+
+    # get training matrix and y vectors
+    x_train = df_train[features].values
+    y_train = df_train.kudos_count.values
+    x_valid = df_valid[features].values
+    y_valid = df_valid.kudos_count.values
+
+    # initialize model
+    model = xgb.XGBRegressor(n_jobs=-1)
+    # train
+    eval_set = [(x_valid, y_valid)]
+    model.fit(
+        x_train,
+        y_train,
+        early_stopping_rounds=10,
+        eval_metric="rmse",
+        eval_set=eval_set,
+        verbose=False,
+    )
+    # predict on validation data
+    valid_preds = model.predict(x_valid)
+    # get rmse, and max_error
+    rmse = mean_squared_error(y_valid, valid_preds, squared=False)
+    print(f"Rmse = {rmse}")
 
 
 if __name__ == "__main__":
