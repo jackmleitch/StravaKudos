@@ -14,6 +14,7 @@ warnings.warn = warn
 
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
+from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_squared_error
 
 
@@ -91,6 +92,18 @@ def train():
     # save target encodings
     with open("models/production/target_encodings/target_enc.pickle", "wb") as f:
         pickle.dump(target_encodings, f)
+
+    # impute missing values in numeric data
+    # initialize imputer with stratergy median
+    imp = SimpleImputer(strategy="median")
+    # fit on training data
+    imp = imp.fit(df_train[num_cols])
+    # transform training and validation data
+    df_train[num_cols] = imp.transform(df_train[num_cols])
+    df_valid[num_cols] = imp.transform(df_valid[num_cols])
+    # save imputer
+    with open("models/production/imputer/numeric_imputer.pickle", "wb") as f:
+        pickle.dump(imp, f)
 
     # get training matrix and y vectors
     features = [f for f in df_train.columns if f not in ("kudos_count")]
