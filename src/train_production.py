@@ -16,6 +16,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_squared_error
+from sklearn.ensemble import RandomForestRegressor
 
 
 def train():
@@ -112,18 +113,22 @@ def train():
     x_valid = df_valid[features].values
     y_valid = df_valid.kudos_count.values
 
+    # load best hyperparams from model_tuning.py
+    with open("models/production/xgb_params.pickle", "rb") as f:
+        params = pickle.load(f)
+
     # initialize model
-    model = xgb.XGBRegressor(n_jobs=-1)
+    model = xgb.XGBRegressor(**params)
     # train
-    eval_set = [(x_valid, y_valid)]
     model.fit(
         x_train,
         y_train,
         early_stopping_rounds=10,
         eval_metric="rmse",
-        eval_set=eval_set,
+        eval_set=[(x_valid, y_valid)],
         verbose=False,
     )
+
     # predict on validation data
     valid_preds = model.predict(x_valid)
     # get rmse, and max_error
@@ -131,6 +136,9 @@ def train():
     rmse_train = mean_squared_error(y_train, model.predict(x_train), squared=False)
     print(f"Rmse valid = {rmse}")
     print(f"Rmse train = {rmse_train}")
+
+    with open("models/production/xgb_model.pickle", "wb") as f:
+        params = pickle.dump(model, f)
 
 
 if __name__ == "__main__":
