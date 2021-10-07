@@ -17,7 +17,7 @@ warnings.warn = warn
 import config
 
 
-def predict(df):
+def predict(df, model=False):
     # get features we need
     # list of numerical columns
     num_cols = [
@@ -70,8 +70,9 @@ def predict(df):
     df = df.values
 
     # load model
-    with open("models/production/xgb_model.pickle", "rb") as f:
-        model = pickle.load(f)
+    if not model:
+        with open("models/production/xgb_model.pickle", "rb") as f:
+            model = pickle.load(f)
 
     # predict on data and return
     preds = model.predict(df)

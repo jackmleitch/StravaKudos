@@ -17,7 +17,7 @@ tqdm.pandas()
 
 def format_date(df, column_name="start_date"):
     """
-    :param df: dataframe that needs date column formatted 
+    :param df: dataframe that needs date column formatted
     :param column_name: column name that needs date formatted
     :param date: date in format yy-mm-ddThh:mm:ssZ
     :return: date column in yy-mm-dd and time column in hh:mm:ss
@@ -40,10 +40,10 @@ def format_date(df, column_name="start_date"):
 
 def format_timezone(df, column_name="timezone"):
     """
-    :param df: dataframe that needs timezone column formatted 
+    :param df: dataframe that needs timezone column formatted
     :param column_name: column name that needs timezone formatted
-    :param timezone: timezone to be stripped of (...) e.g. (GMT-05:00) America/New_York -> America/New_York  
-    :return: formatted timezone 
+    :param timezone: timezone to be stripped of (...) e.g. (GMT-05:00) America/New_York -> America/New_York
+    :return: formatted timezone
     """
 
     def format_timezone_helper(timezone):
@@ -89,7 +89,7 @@ def area_enclosed_by_run(poly, display=False):
     Calculated the area enclosed by runs gps trace.
     :param poly: polyline from gps trace
     :param display: bool, True outputs a plot of gps trace
-    :return: area enclosed 
+    :return: area enclosed
     """
 
     def computeArea(pos):
@@ -103,7 +103,10 @@ def area_enclosed_by_run(poly, display=False):
         if display:
             fig = plt.figure(figsize=(12, 12))
             fig.suptitle("Strava Activity polymap")
-            ax = plt.Axes(fig, [0.0, 0.0, 1.0, 1.0],)
+            ax = plt.Axes(
+                fig,
+                [0.0, 0.0, 1.0, 1.0],
+            )
             ax.set_aspect("equal")
             ax.set_axis_off()
             fig.add_axes(ax)
@@ -124,19 +127,19 @@ def area_enclosed_by_run(poly, display=False):
 
 def get_poly_areas(df, column_name="map.summary_polyline"):
     """
-    :param df: dataframe that needs timezone column formatted 
-    :param column_name: column name that contains polylines 
+    :param df: dataframe that needs timezone column formatted
+    :param column_name: column name that contains polylines
     :return: run gps area
     """
 
-    df["run_area"] = df[column_name].progress_apply(lambda x: area_enclosed_by_run(x))
+    df["run_area"] = df[column_name].apply(lambda x: area_enclosed_by_run(x))
     df = df.drop(column_name, axis=1)
     return df
 
 
 def apply_clustering(df):
     """
-    :param df: dataframe that needs lat, lng column clustered 
+    :param df: dataframe that needs lat, lng column clustered
     :return: cluster
     """
     with open("models/cluster_latlng", "rb") as f:
@@ -144,13 +147,13 @@ def apply_clustering(df):
 
     def apply_clustering_helper(lat, lng, cluster_model, num_clusters=6):
         """
-        If there is a latitude and longitude predict the cluster. If not 
+        If there is a latitude and longitude predict the cluster. If not
         assign to a new cluster.
         :param lat: start latitude of run
-        :param lng: start longitude of run 
+        :param lng: start longitude of run
         :param cluster_model: KMeans clustering model fit on training data
-        :param num_clusters: used to assign new cluster to missing data 
-        :return: cluster assigned 
+        :param num_clusters: used to assign new cluster to missing data
+        :return: cluster assigned
         """
         if not np.isnan(lat) and not np.isnan(
             lng
@@ -239,6 +242,98 @@ def map_time_of_day(hour):
 
     else:
         return "Night"
+
+
+def preprocess_unseen(data):
+    # extract only runs
+    data = data.loc[data.type == "Run"]
+    data = data.drop(columns=["type"])
+    # add race heuristics
+    data["workout_type"] = data.apply(
+        lambda row: race_heuristic(row["name"], row["workout_type"]), axis=1
+    )
+    # remove private activities
+    data = data.loc[data.private == False].drop("private", axis=1)
+    # label names
+    data.loc[:, "is_named"] = data.apply(lambda row: label_name(row), axis=1)
+    # format date
+    data = format_date(data)
+    # get runs per day feature
+    counts = data.groupby("local_date").size().reset_index(name="run_per_day")
+    data = pd.merge(data, counts, on=["local_date"], how="inner")
+    # label max run
+    max_dist = (
+        data.groupby("local_date")["distance"]
+        .agg("max")
+        .reset_index(name="max_distance")
+    )
+    data.loc[:, "max_run"] = data.apply(lambda row: label_max(row, max_dist), axis=1)
+    # get run area feature
+    data = get_poly_areas(data)
+    # convert distance in meters to kilometers
+    data.loc[:, "distance"] = data.distance / 1000
+    # convert moving in seconds time to minutes
+    data.loc[:, "moving_time"] = data.moving_time / 60
+    # convert average speed in meters per second to minutes per kilometer
+    data.loc[:, "average_speed_mpk"] = 16.666 / data.average_speed
+    data = data.drop("average_speed", axis=1)
+    # remove runs with no kudos as it wasn't available to public
+    data = data[data.kudos_count != 0]
+    # drop unwanted/useless columns from the dataset
+    cols_to_drop = [
+        "resource_state",
+        "id",
+        "external_id",
+        "upload_id",
+        "utc_offset",
+        "start_latlng",
+        "end_latlng",
+        "trainer",
+        "commute",
+        "visibility",
+        "flagged",
+        "gear_id",
+        "from_accepted_tag",
+        "upload_id_str",
+        "average_cadence",
+        "average_temp",
+        "has_heartrate",
+        "heartrate_opt_out",
+        "display_hide_heartrate_option",
+        "elev_high",
+        "elev_low",
+        "has_kudoed",
+        "athlete.id",
+        "athlete.resource_state",
+        "map.id",
+        "map.resource_state",
+        "device_watts",
+        "average_watts",
+        "kilojoules",
+        "photo_count",
+        "athlete_count",
+        "location_city",
+        "location_state",
+        "location_country",
+        "comment_count",
+        "elapsed_time",
+        "start_latitude",
+        "start_longitude",
+        "timezone",
+        "achievement_count",
+        "total_photo_count",
+        "GMT_date",
+        "GMT_time",
+        "local_date",
+        "local_time",
+        "manual",
+    ]
+    for col in cols_to_drop:
+        try:
+            data = data.drop(col, axis=1)
+        except:
+            pass
+    return data
 
 
 if __name__ == "__main__":
