@@ -19,12 +19,22 @@ from sklearn.metrics import mean_squared_error
 from sklearn.ensemble import RandomForestRegressor
 
 
+def uk_awake(hour):
+    if hour >= 6 and hour <= 19:
+        return 1
+    else:
+        return 0
+
+
 def train():
 
     # read in the data
     STRAVA_TRAIN_PATH = "input/data_train.csv"
     df = pd.read_csv(STRAVA_TRAIN_PATH)
-
+    # create uk awake feature
+    df.loc[:, "datetime"] = pd.to_datetime(df["GMT_date"] + " " + df["GMT_time"])
+    df.loc[:, "hour"] = df["datetime"].dt.hour
+    df.loc[:, "uk_awake"] = df.hour.apply(uk_awake)
     # get features we need
     # list of numerical columns
     num_cols = [
@@ -38,7 +48,7 @@ def train():
         "run_area",
     ]
     # list of categorical columns
-    cat_cols = ["max_run", "workout_type", "is_named", "run_per_day"]
+    cat_cols = ["max_run", "workout_type", "is_named", "run_per_day", "uk_awake"]
     # all cols are features except for target
     features = num_cols + cat_cols
     # select only needed cols
@@ -143,4 +153,3 @@ def train():
 
 if __name__ == "__main__":
     train()
-    # df[your_col] = df[your_col].apply(lambda x: le_dict.get(x, <unknown_value>))

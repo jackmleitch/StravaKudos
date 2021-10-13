@@ -103,10 +103,7 @@ def area_enclosed_by_run(poly, display=False):
         if display:
             fig = plt.figure(figsize=(12, 12))
             fig.suptitle("Strava Activity polymap")
-            ax = plt.Axes(
-                fig,
-                [0.0, 0.0, 1.0, 1.0],
-            )
+            ax = plt.Axes(fig, [0.0, 0.0, 1.0, 1.0],)
             ax.set_aspect("equal")
             ax.set_axis_off()
             fig.add_axes(ax)
@@ -244,6 +241,13 @@ def map_time_of_day(hour):
         return "Night"
 
 
+def uk_awake(hour):
+    if hour >= 6 and hour <= 19:
+        return 1
+    else:
+        return 0
+
+
 def preprocess_unseen(data):
     # extract only runs
     data = data.loc[data.type == "Run"]
@@ -279,6 +283,10 @@ def preprocess_unseen(data):
     data = data.drop("average_speed", axis=1)
     # remove runs with no kudos as it wasn't available to public
     data = data[data.kudos_count != 0]
+    # create uk awake feature
+    data.loc[:, "datetime"] = pd.to_datetime(data["GMT_date"] + " " + data["GMT_time"])
+    data.loc[:, "hour"] = data["datetime"].dt.hour
+    data.loc[:, "uk_awake"] = data.hour.apply(uk_awake)
     # drop unwanted/useless columns from the dataset
     cols_to_drop = [
         "resource_state",
@@ -324,7 +332,6 @@ def preprocess_unseen(data):
         "total_photo_count",
         "GMT_date",
         "GMT_time",
-        "local_date",
         "local_time",
         "manual",
     ]
