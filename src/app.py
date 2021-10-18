@@ -1,5 +1,6 @@
 import requests
 import pickle
+from requests.sessions import default_headers
 import urllib3
 import re
 import polyline
@@ -16,7 +17,8 @@ import numpy as np
 import xgboost as xgb
 
 from sklearn.metrics import mean_squared_error, r2_score
-
+from pandas_profiling import ProfileReport
+from streamlit_pandas_profiling import st_profile_report
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -36,6 +38,19 @@ def uk_awake(hour):
         return 1
     else:
         return 0
+
+
+@st.cache(allow_output_mutation=True)
+def load_strava_data():
+    train_data = pd.read_csv(config.STRAVA_TRAIN_PATH)
+    train_data.loc[:, "datetime"] = pd.to_datetime(
+        train_data["GMT_date"] + " " + train_data["GMT_time"]
+    )
+    train_data.loc[:, "hour"] = train_data["datetime"].dt.hour
+    train_data.loc[:, "uk_awake"] = train_data.hour.apply(uk_awake)
+    y = train_data.kudos_count
+    train_data = process(train_data)
+    return train_data, y
 
 
 @st.cache
@@ -94,6 +109,11 @@ def load_model():
     return model
 
 
+def st_shap(plot, height=None):
+    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
+    components.html(shap_html, height=height)
+
+
 def app_main():
 
     st.title("Kudos Predictor :running: :dart:")
@@ -104,8 +124,7 @@ def app_main():
     # load in xgb model
     model = load_model()
 
-    st.write("")
-    st.write("")
+    st.write("---")
 
     st.write(
         ":arrow_down_small: Predict Kudos on most recent activities :arrow_down_small:"
@@ -184,26 +203,19 @@ def app_main():
             st.write(
                 f"This unseen dataset consisting of {datapoints} data points has a mean Kudos value of {round(np.mean(new_data_preds.kudos_count),2)} with a standard deviation of {round(np.std(new_data_preds.kudos_count),2)}."
             )
-            st.write("")
-            st.write("")
+            st.write("---")
             col1, col2 = st.columns(2)
             col1.metric(label="Root Mean Squared Error", value=f"{round(rmse, 2)}")
             col2.metric(
                 label="R2 Score",
                 value=f"{round(r2_score(new_data_preds.kudos_count[1:], new_preds[1:]),2)}",
             )
-            st.write("")
-            st.write("")
+            st.write("---")
             if display_preds.shape[0] > 10:
                 # Add histogram data
                 hist_data = display_preds[["Kudos", "Predicted Kudos"]]
                 st.write("True Kudos Values vs. Predicted")
                 st.line_chart(data=hist_data, use_container_width=True)
-
-
-def st_shap(plot, height=None):
-    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
-    components.html(shap_html, height=height)
 
 
 def app_explain():
@@ -253,7 +265,7 @@ def app_explain():
     st.write(
         """
     With SHAP, we can generate explanations for a single prediction. The SHAP plot shows features that contribute to pushing the output from the base value (average model output) to the actual predicted value.
-Red color indicates features that are pushing the prediction higher, and blue color indicates just the opposite.
+    Red color indicates features that are pushing the prediction higher, and blue color indicates just the opposite.
 
     """
     )
@@ -266,13 +278,7 @@ Red color indicates features that are pushing the prediction higher, and blue co
     )
 
     # load in full training set
-    train_data = pd.read_csv(config.STRAVA_TRAIN_PATH)
-    train_data.loc[:, "datetime"] = pd.to_datetime(
-        train_data["GMT_date"] + " " + train_data["GMT_time"]
-    )
-    train_data.loc[:, "hour"] = train_data["datetime"].dt.hour
-    train_data.loc[:, "uk_awake"] = train_data.hour.apply(uk_awake)
-    train_data = process(train_data)
+    train_data, _ = load_strava_data()
     shap_values_all = explainer.shap_values(train_data)
 
     st.subheader("Assessing feature importance based on Shap values")
@@ -288,7 +294,7 @@ Red color indicates features that are pushing the prediction higher, and blue co
     st.write(
         """
                 We can visualize the importance of the features and their impact on the prediction by plotting summary charts. The one below sorts features by the sum of SHAP value magnitudes over all samples. It also uses SHAP values to show the distribution of the impacts each feature has.
-The color represents the feature value — red indicating high and blue indicating low. 
+                The color represents the feature value — red indicating high and blue indicating low. 
 
             """
     )
@@ -303,9 +309,9 @@ The color represents the feature value — red indicating high and blue indicati
     st.write(
         """
     Explaining single feature
-To understand the effect a single feature has on the model output, we can plot a SHAP value of that feature vs. the value of the feature for all instances in the dataset.
-The chart below shows the change in kudos count as the feature value changes. Vertical dispersions at a single value show interaction effects with other features. 
-SHAP automatically selects another feature for coloring to make these interactions easier to see:
+    To understand the effect a single feature has on the model output, we can plot a SHAP value of that feature vs. the value of the feature for all instances in the dataset.
+    The chart below shows the change in kudos count as the feature value changes. Vertical dispersions at a single value show interaction effects with other features. 
+    SHAP automatically selects another feature for coloring to make these interactions easier to see:
 
     """
     )
@@ -321,7 +327,43 @@ SHAP automatically selects another feature for coloring to make these interactio
 
 
 def app_EDA():
-    st.title("Exploratory data analysis")
+    st.title("Exploratory data analysis ::mag_right: :flashlight:")
+    # load in full training set
+    st.write("---")
+
+    st.header("**Input DataFrame**")
+    df, y = load_strava_data()
+    df.loc[:, "kudos_count"] = y
+    st.write(df)
+    st.write("---")
+
+    st.header("Correlation Matrix")
+    sns.set_theme(style="white")
+    # Compute the correlation matrix
+    corr = df.corr()
+    # Generate a mask for the upper triangle
+    mask = np.triu(np.ones_like(corr, dtype=bool))
+    # Generate a custom diverging colormap
+    cmap = sns.diverging_palette(230, 20, as_cmap=True)
+    # Draw the heatmap with the mask and correct aspect ratio
+    fig = plt.figure()
+    matrix = sns.heatmap(
+        corr,
+        mask=mask,
+        cmap=cmap,
+        vmax=0.3,
+        center=0,
+        square=True,
+        linewidths=0.5,
+        cbar_kws={"shrink": 0.5},
+    )
+    st.pyplot(fig)
+
+    pr = ProfileReport(df, explorative=True, correlations=None)
+
+    st.write("---")
+    st.header("**Pandas Profiling Report**")
+    st_profile_report(pr)
 
 
 def app():
