@@ -2,7 +2,6 @@ notes/
 __pycache__/
 .vscode/settings.json
 .vscode
-src/config.py
 logs.log
 notebooks/logs.log
 notebooks/.ipynb_checkpoints
@@ -14,3 +13,5 @@ catboost_info/learn_error.tsv
 catboost_info/time_left.tsv
 catboost_info/learn/events.out.tfevents
 src/stravaAPI/update_pred.py
+strava_payload.json
+notebooks/github_plot.ipynb

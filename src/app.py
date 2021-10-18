@@ -5,6 +5,7 @@ import urllib3
 import re
 import polyline
 import shap
+import os
 
 import streamlit as st
 import pandas as pd
@@ -28,9 +29,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # from plotly.subplots import make_subplots
-import config
 from preprocess import preprocess_unseen
 from predict import predict, process
+import json
+import config
 
 
 def uk_awake(hour):
@@ -42,7 +44,7 @@ def uk_awake(hour):
 
 @st.cache(allow_output_mutation=True)
 def load_strava_data():
-    train_data = pd.read_csv(config.STRAVA_TRAIN_PATH)
+    train_data = pd.read_csv("./input/data_train.csv")
     train_data.loc[:, "datetime"] = pd.to_datetime(
         train_data["GMT_date"] + " " + train_data["GMT_time"]
     )
