@@ -19,22 +19,10 @@ from sklearn.metrics import mean_squared_error
 from sklearn.ensemble import RandomForestRegressor
 
 
-def uk_awake(hour):
-    if hour >= 6 and hour <= 19:
-        return 1
-    else:
-        return 0
-
-
-def train():
-
+def feature_engineer():
     # read in the data
     STRAVA_TRAIN_PATH = "input/data_train.csv"
     df = pd.read_csv(STRAVA_TRAIN_PATH)
-    # create uk awake feature
-    df.loc[:, "datetime"] = pd.to_datetime(df["GMT_date"] + " " + df["GMT_time"])
-    df.loc[:, "hour"] = df["datetime"].dt.hour
-    df.loc[:, "uk_awake"] = df.hour.apply(uk_awake)
     # get features we need
     # list of numerical columns
     num_cols = [
@@ -48,7 +36,7 @@ def train():
         "run_area",
     ]
     # list of categorical columns
-    cat_cols = ["max_run", "workout_type", "is_named", "run_per_day", "uk_awake"]
+    cat_cols = ["max_run", "workout_type", "run_per_day", "uk_awake"]
     # all cols are features except for target
     features = num_cols + cat_cols
     # select only needed cols
@@ -57,7 +45,6 @@ def train():
     # fill in NAs in cat columns with NONE
     for col in cat_cols:
         df.loc[:, col] = df[col].astype(str).fillna("NONE")
-
     # split data into test and training
     # randomize the rows of the data
     df = df.sample(frac=1, random_state=42).reset_index(drop=True)
@@ -93,7 +80,8 @@ def train():
     # get target encodings
     target_encodings = {}
     # loop over each cat column
-    for col in cat_cols:
+    target_encoding_cols = ["workout_type", "max_run", "run_per_day"]
+    for col in target_encoding_cols:
         # create dict of category:mean_target
         mapping_dict = dict(df_train.groupby(col)["kudos_count"].mean())
         target_encodings[col] = mapping_dict
@@ -123,6 +111,13 @@ def train():
     x_valid = df_valid[features].values
     y_valid = df_valid.kudos_count.values
 
+    return x_train, y_train, x_valid, y_valid
+
+
+def train():
+
+    # engineer features
+    x_train, y_train, x_valid, y_valid = feature_engineer()
     # load best hyperparams from model_tuning.py
     with open("models/production/xgb_params.pickle", "rb") as f:
         params = pickle.load(f)

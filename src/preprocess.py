@@ -15,6 +15,13 @@ import config
 tqdm.pandas()
 
 
+def uk_awake(hour):
+    if hour >= 6 and hour <= 19:
+        return 1
+    else:
+        return 0
+
+
 def format_date(df, column_name="start_date"):
     """
     :param df: dataframe that needs date column formatted
@@ -54,23 +61,6 @@ def format_timezone(df, column_name="timezone"):
     return df
 
 
-def uk_awake_feature(df):
-    """
-    A binary feature to see if run was in U.K. awake hours or not
-    """
-
-    def is_awake(time_element):
-        time_element = datetime.datetime.time(
-            datetime.datetime.strptime(time_element, "%H:%M:%S")
-        )
-        wake = datetime.time(8, 00, 00)
-        sleep = datetime.time(22, 59, 59)
-        return int(time_element > wake and time_element < sleep)
-
-    df["is_uk_awake"] = df["GMT_time"].apply(lambda x: is_awake(x))
-    return df
-
-
 def generate_time_features(df):
     # create time based features using date columns
     df.loc[:, "datetime"] = pd.to_datetime(df["local_date"] + " " + df["local_time"])
@@ -80,7 +70,6 @@ def generate_time_features(df):
     df.loc[:, "dayofweek"] = df["datetime"].dt.dayofweek
     df.loc[:, "weekend"] = (df.datetime.dt.weekday >= 5).astype(int)
     df.loc[:, "hour"] = df["datetime"].dt.hour
-    df = uk_awake_feature(df)
     return df
 
 
@@ -248,7 +237,7 @@ def uk_awake(hour):
         return 0
 
 
-def preprocess_unseen(data):
+def preprocess_unseen(data, training_data=False):
     # extract only runs
     data = data.loc[data.type == "Run"]
     data = data.drop(columns=["type"])
@@ -257,7 +246,10 @@ def preprocess_unseen(data):
         lambda row: race_heuristic(row["name"], row["workout_type"]), axis=1
     )
     # remove private activities
-    data = data.loc[data.private == False].drop("private", axis=1)
+    if training_data:
+        data = data.loc[data.private == False].iloc[0:1125].drop("private", axis=1)
+    else:
+        data = data.loc[data.private == False].drop("private", axis=1)
     # label names
     data.loc[:, "is_named"] = data.apply(lambda row: label_name(row), axis=1)
     # format date
@@ -344,109 +336,11 @@ def preprocess_unseen(data):
 
 
 if __name__ == "__main__":
-    # load in initial data gathered from the Strava API
+    # load in initial data gathered from the Strava API and process it
     data_path = config.STRAVA_DATA_PATH
     data_init = pd.read_csv(data_path, index_col=0)
-
-    # filter out runs from activities and drop type column
-    data_init = data_init.loc[data_init.type == "Run"]
-    data_init = data_init.drop(columns=["type"])
-
-    # add race heuristics
-    data_init["workout_type"] = data_init.apply(
-        lambda row: race_heuristic(row["name"], row["workout_type"]), axis=1
-    )
-
-    # remove private activities and drop older activities
-    data_init = (
-        data_init.loc[data_init.private == False].iloc[0:1125].drop("private", axis=1)
-    )
-    # map photo feature
-    data_init["has_photo"] = data_init["total_photo_count"].map(
-        lambda x: 0 if x == 0 else 1
-    )
-
-    # label names
-    data_init.loc[:, "is_named"] = data_init.apply(lambda row: label_name(row), axis=1)
-
-    data_init = format_date(data_init)
-    data_init = format_timezone(data_init)
-
-    # get runs per day feature
-    counts = data_init.groupby("local_date").size().reset_index(name="run_per_day")
-    data_init = pd.merge(data_init, counts, on=["local_date"], how="inner")
-
-    # longest run of day
-    max_dist = (
-        data_init.groupby("local_date")["distance"]
-        .agg("max")
-        .reset_index(name="max_distance")
-    )
-    data_init.loc[:, "max_run"] = data_init.apply(
-        lambda row: label_max(row, max_dist), axis=1
-    )
-    data_init = generate_time_features(data_init)
-    data_init["hour_binned"] = data_init["hour"].apply(map_time_of_day)
-
-    print("Adding run area feature...")
-    data_init = get_poly_areas(data_init)
-    data_init = apply_clustering(data_init)
-    print("Adding reverse geocoder feature...")
-    data_init = reverse_geocoder(data_init)
-
-    # convert distance in meters to kilometers
-    data_init.loc[:, "distance"] = data_init.distance / 1000
-    # convert moving in seconds time to minutes
-    data_init.loc[:, "moving_time"] = data_init.moving_time / 60
-    # convert average speed in meters per second to minutes per kilometer
-    data_init.loc[:, "average_speed_mpk"] = 16.666 / data_init.average_speed
-    data_init = data_init.drop("average_speed", axis=1)
-    # remove runs with no kudos as it wasn't available to public
-    data_init = data_init[data_init.kudos_count != 0]
-
-    # drop unwanted/useless columns from the dataset
-    cols_to_drop = [
-        "resource_state",
-        "id",
-        "external_id",
-        "upload_id",
-        "utc_offset",
-        "start_latlng",
-        "end_latlng",
-        "trainer",
-        "commute",
-        "visibility",
-        "flagged",
-        "gear_id",
-        "from_accepted_tag",
-        "upload_id_str",
-        "average_cadence",
-        "average_temp",
-        "has_heartrate",
-        "heartrate_opt_out",
-        "display_hide_heartrate_option",
-        "elev_high",
-        "elev_low",
-        "has_kudoed",
-        "athlete.id",
-        "athlete.resource_state",
-        "map.id",
-        "map.resource_state",
-        "device_watts",
-        "average_watts",
-        "kilojoules",
-        "photo_count",
-        "athlete_count",
-        "location_city",
-        "location_state",
-        "location_country",
-        "comment_count",
-        "elapsed_time",
-        "start_latitude",
-        "start_longitude",
-    ]
-
-    data_init = data_init.drop(cols_to_drop, axis=1)
+    # preprocess
+    data_init = preprocess_unseen(data_init, training_data=True)
 
     # split data into training and testing set
     test_frac = 0.25

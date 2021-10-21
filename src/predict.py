@@ -17,14 +17,7 @@ warnings.warn = warn
 import config
 
 
-def uk_awake(hour):
-    if hour >= 6 and hour <= 19:
-        return 1
-    else:
-        return 0
-
-
-def predict(df, model=False):
+def process(df):
     # get features we need
     # list of numerical columns
     num_cols = [
@@ -38,12 +31,11 @@ def predict(df, model=False):
         "run_area",
     ]
     # list of categorical columns
-    cat_cols = ["max_run", "workout_type", "is_named", "run_per_day", "uk_awake"]
+    cat_cols = ["max_run", "workout_type", "run_per_day", "uk_awake"]
     # all cols are features except for target
     features = num_cols + cat_cols
     # select only needed cols
     df = df[features]
-
     # fill in NAs in cat columns with NONE
     for col in cat_cols:
         df.loc[:, col] = df[col].astype(str).fillna("NONE")
@@ -57,10 +49,11 @@ def predict(df, model=False):
         df.loc[:, col] = df[col].apply(lambda x: lbl.get(x, np.nan))
 
     # load in target encodings
+    target_encoding_cols = ["workout_type", "max_run", "run_per_day"]
     with open("models/production/target_encodings/target_enc.pickle", "rb") as f:
         target_encodings = pickle.load(f)
     # loop over each cat column
-    for col in cat_cols:
+    for col in target_encoding_cols:
         # get mapping
         mapping_dict = target_encodings[col]
         # column_enc is the new column we have with mean encodings
@@ -72,8 +65,13 @@ def predict(df, model=False):
         imp = pickle.load(f)
     # transform data
     df[num_cols] = imp.transform(df[num_cols])
+    return df
 
-    # get data matrix and y vector
+
+def predict(df, model=False):
+
+    # get features we need
+    df = process(df)
     df = df.values
 
     # load model
@@ -92,72 +90,14 @@ def score_preds(preds, y_true):
     print(f"RMSE on data = {rmse}")
 
 
-def process(df):
-    # get features we need
-    # list of numerical columns
-    num_cols = [
-        "distance",
-        "average_speed_mpk",
-        "suffer_score",
-        "max_speed",
-        "moving_time",
-        "max_heartrate",
-        "total_elevation_gain",
-        "run_area",
-    ]
-    # list of categorical columns
-    cat_cols = ["max_run", "workout_type", "is_named", "run_per_day", "uk_awake"]
-    # all cols are features except for target
-    features = num_cols + cat_cols
-    # select only needed cols
-    df = df[features]
-    # fill in NAs in cat columns with NONE
-    for col in cat_cols:
-        df.loc[:, col] = df[col].astype(str).fillna("NONE")
-
-    # we encode all the features
-    for col in cat_cols:
-        # load in label encoder
-        with open(f"models/production/label_encoders/lbl_enc_{col}.pickle", "rb") as f:
-            lbl = pickle.load(f)
-        # transform the column data
-        df.loc[:, col] = df[col].apply(lambda x: lbl.get(x, np.nan))
-
-    # load in target encodings
-    with open("models/production/target_encodings/target_enc.pickle", "rb") as f:
-        target_encodings = pickle.load(f)
-    # loop over each cat column
-    for col in cat_cols:
-        # get mapping
-        mapping_dict = target_encodings[col]
-        # column_enc is the new column we have with mean encodings
-        df.loc[:, col + "_enc"] = df[col].map(mapping_dict)
-
-    # impute missing values in numeric data
-    # load in imputer
-    with open("models/production/imputer/numeric_imputer.pickle", "rb") as f:
-        imp = pickle.load(f)
-    # transform data
-    df[num_cols] = imp.transform(df[num_cols])
-    return df
-
-
 if __name__ == "__main__":
+
     # read in data
     test_data = pd.read_csv(config.STRAVA_TEST_PATH)
-    # create uk awake feature
-    test_data.loc[:, "datetime"] = pd.to_datetime(
-        test_data["GMT_date"] + " " + test_data["GMT_time"]
-    )
-    test_data.loc[:, "hour"] = test_data["datetime"].dt.hour
-    test_data.loc[:, "uk_awake"] = test_data.hour.apply(uk_awake)
-    # make predictions
 
+    # make predictions
     preds = predict(test_data)
+
     # score preds
     y_true = test_data.kudos_count.values
     score_preds(preds, y_true)
-
-    # # compare a few
-    # compare = list(zip(preds[10:20], y_true[10:20]))
-    # print(compare)
