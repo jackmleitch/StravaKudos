@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import xgboost as xgb
 import pickle
 
@@ -12,17 +11,18 @@ import warnings
 
 warnings.warn = warn
 
-from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import mean_squared_error
-from sklearn.ensemble import RandomForestRegressor
 
 
 def feature_engineer():
     # read in the data
     STRAVA_TRAIN_PATH = "input/data_train.csv"
     df = pd.read_csv(STRAVA_TRAIN_PATH)
+
+    # print training shape
+    print(f"Training shape: {df.shape}")
+
     # get features we need
     # list of numerical columns
     num_cols = [
@@ -45,34 +45,16 @@ def feature_engineer():
     # fill in NAs in cat columns with NONE
     for col in cat_cols:
         df.loc[:, col] = df[col].astype(str).fillna("NONE")
-    # split data into test and training
-    # randomize the rows of the data
-    df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-    # Sturge's rule to calc bins
-    num_bins = int(np.floor(1 + np.log2(len(df))))
-    # bin targets
-    df.loc[:, "bins"] = pd.cut(df["kudos_count"], bins=num_bins, labels=False)
-    # initiate kfold class, 5 splits gives valid size 1/4 = 25%
-    kf = StratifiedKFold(n_splits=4, random_state=42)
-    # get indicies for train and valid set
-    train_idx, valid_idx = next(iter(kf.split(X=df, y=df.bins.values)))
-    # drop bins col
-    df = df.drop("bins", axis=1)
-    # set train and valid dataset
-    df_train = df.loc[train_idx, :]
-    df_valid = df.loc[valid_idx, :]
-    print(f"Training shape: {df_train.shape} \nValidation shape: {df_valid.shape}")
 
     # we label encode all the features
     for col in cat_cols:
         # initialise label encoder
         lbl = LabelEncoder()
         # fit label encoder on training data
-        lbl.fit(df_train[col])
+        lbl.fit(df[col])
         encodings = dict(zip(lbl.classes_, lbl.transform(lbl.classes_)))
         # transform all of the data
-        df_train.loc[:, col] = lbl.transform(df_train[col])
-        df_valid.loc[:, col] = lbl.transform(df_valid[col])
+        df.loc[:, col] = lbl.transform(df[col])
         # save each encoder
         with open(f"models/production/label_encoders/lbl_enc_{col}.pickle", "wb") as f:
             pickle.dump(encodings, f)
@@ -83,11 +65,10 @@ def feature_engineer():
     target_encoding_cols = ["workout_type", "max_run", "run_per_day"]
     for col in target_encoding_cols:
         # create dict of category:mean_target
-        mapping_dict = dict(df_train.groupby(col)["kudos_count"].mean())
+        mapping_dict = dict(df.groupby(col)["kudos_count"].mean())
         target_encodings[col] = mapping_dict
         # column_enc is the new column we have with mean encodings
-        df_train.loc[:, col + "_enc"] = df_train[col].map(mapping_dict)
-        df_valid.loc[:, col + "_enc"] = df_valid[col].map(mapping_dict)
+        df.loc[:, col + "_enc"] = df[col].map(mapping_dict)
     # save target encodings
     with open("models/production/target_encodings/target_enc.pickle", "wb") as f:
         pickle.dump(target_encodings, f)
@@ -96,28 +77,24 @@ def feature_engineer():
     # initialize imputer with stratergy median
     imp = SimpleImputer(strategy="median")
     # fit on training data
-    imp = imp.fit(df_train[num_cols])
-    # transform training and validation data
-    df_train[num_cols] = imp.transform(df_train[num_cols])
-    df_valid[num_cols] = imp.transform(df_valid[num_cols])
+    imp = imp.fit(df[num_cols])
+    # transform training data
+    df[num_cols] = imp.transform(df[num_cols])
     # save imputer
     with open("models/production/imputer/numeric_imputer.pickle", "wb") as f:
         pickle.dump(imp, f)
 
     # get training matrix and y vectors
-    features = [f for f in df_train.columns if f not in ("kudos_count")]
-    x_train = df_train[features].values
-    y_train = df_train.kudos_count.values
-    x_valid = df_valid[features].values
-    y_valid = df_valid.kudos_count.values
-
-    return x_train, y_train, x_valid, y_valid
+    features = [f for f in df.columns if f not in ("kudos_count")]
+    x_train = df[features].values
+    y_train = df.kudos_count.values
+    return x_train, y_train
 
 
 def train():
 
     # engineer features
-    x_train, y_train, x_valid, y_valid = feature_engineer()
+    x_train, y_train = feature_engineer()
     # load best hyperparams from model_tuning.py
     with open("models/production/xgb_params.pickle", "rb") as f:
         params = pickle.load(f)
@@ -126,24 +103,13 @@ def train():
     model = xgb.XGBRegressor(**params)
     # train
     model.fit(
-        x_train,
-        y_train,
-        early_stopping_rounds=10,
-        eval_metric="rmse",
-        eval_set=[(x_valid, y_valid)],
-        verbose=False,
+        x_train, y_train,
     )
-
-    # predict on validation data
-    valid_preds = model.predict(x_valid)
-    # get rmse, and max_error
-    rmse = mean_squared_error(y_valid, valid_preds, squared=False)
-    rmse_train = mean_squared_error(y_train, model.predict(x_train), squared=False)
-    print(f"Rmse valid = {rmse}")
-    print(f"Rmse train = {rmse_train}")
 
     with open("models/production/xgb_model.pickle", "wb") as f:
         params = pickle.dump(model, f)
+
+    print("Training done and model saved to models/production/xgb_model.pickle")
 
 
 if __name__ == "__main__":
