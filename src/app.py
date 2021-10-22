@@ -35,24 +35,12 @@ import json
 import config
 
 
-def uk_awake(hour):
-    if hour >= 6 and hour <= 19:
-        return 1
-    else:
-        return 0
-
-
 @st.cache(allow_output_mutation=True)
 def load_strava_data():
     train_data = pd.read_csv("./input/data_train.csv")
-    train_data.loc[:, "datetime"] = pd.to_datetime(
-        train_data["GMT_date"] + " " + train_data["GMT_time"]
-    )
-    train_data.loc[:, "hour"] = train_data["datetime"].dt.hour
-    train_data.loc[:, "uk_awake"] = train_data.hour.apply(uk_awake)
     y = train_data.kudos_count
-    train_data = process(train_data)
-    return train_data, y
+    X = process(train_data)
+    return X, y
 
 
 @st.cache
@@ -238,7 +226,7 @@ def app_explain():
             - **Max Speed**: Maximum speed of activity 
             - **Moving Time**: Moving time of activity (min)
             - **Max Heartrate**: Maximum heartrate of activity
-            - **Total Elevation Gain**: Meteres climbed in the activity 
+            - **Total Elevation Gain**: Meters climbed in the activity 
             - **Run Area**: Area enclosed by the activity (a bigger loop has a bigger run area)
 
         """
@@ -247,7 +235,6 @@ def app_explain():
         """ 
             - **Max Run**: (Categorical) Is the activity the longest activity of the day?
             - **Workout Type**: (Categorical) Type of activity. 0 is an easy run, 1 is a race, 2 is a long run, and 3 is a workout. 
-            - **Is Named**: (Categorical) Is the activity named on Strava?
             - **Run Per Day**: (Categorical) How many activities were done that day?
             - **UK Awake**: (Categorical) Is the UK awake when this acitivity was done?
         """
@@ -280,12 +267,12 @@ def app_explain():
     )
 
     # load in full training set
-    train_data, _ = load_strava_data()
-    shap_values_all = explainer.shap_values(train_data)
+    data_full, y_full = load_strava_data()
+    shap_values_all = explainer.shap_values(data_full)
 
     st.subheader("Assessing feature importance based on Shap values")
     st.pyplot(
-        shap.summary_plot(shap_values_all, train_data, plot_type="bar"),
+        shap.summary_plot(shap_values_all, data_full, plot_type="bar"),
         bbox_inches="tight",
         dpi=300,
         pad_inches=0,
@@ -296,13 +283,13 @@ def app_explain():
     st.write(
         """
                 We can visualize the importance of the features and their impact on the prediction by plotting summary charts. The one below sorts features by the sum of SHAP value magnitudes over all samples. It also uses SHAP values to show the distribution of the impacts each feature has.
-                The color represents the feature value — red indicating high and blue indicating low. 
+                The color represents the feature value — red indicating high and blue indicating low.
 
             """
     )
 
     st.pyplot(
-        shap.summary_plot(shap_values_all, train_data),
+        shap.summary_plot(shap_values_all, data_full),
         bbox_inches="tight",
         dpi=300,
         pad_inches=0,
@@ -312,16 +299,16 @@ def app_explain():
         """
     Explaining single feature
     To understand the effect a single feature has on the model output, we can plot a SHAP value of that feature vs. the value of the feature for all instances in the dataset.
-    The chart below shows the change in kudos count as the feature value changes. Vertical dispersions at a single value show interaction effects with other features. 
+    The chart below shows the change in kudos count as the feature value changes. Vertical dispersions at a single value show interaction effects with other features.
     SHAP automatically selects another feature for coloring to make these interactions easier to see:
 
     """
     )
     select_feature = st.selectbox(
-        "What feature would you like to see?", train_data.columns
+        "What feature would you like to see?", data_full.columns
     )
     st.pyplot(
-        shap.dependence_plot(select_feature, shap_values_all, train_data),
+        shap.dependence_plot(select_feature, shap_values_all, data_full),
         bbox_inches="tight",
         dpi=300,
         pad_inches=0,
