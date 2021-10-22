@@ -56,7 +56,7 @@ def objective(trial, n_jobs=-1, random_state=42):
         "tree_method": "gpu_hist",
         "verbosity": 0,  # 0 (silent) - 3 (debug)
         "objective": "reg:squarederror",
-        "n_estimators": trial.suggest_int("n_estimators", 100, 5000),
+        "n_estimators": trial.suggest_int("n_estimators", 100, 1000),
         "max_depth": trial.suggest_int("max_depth", 4, 12),
         "learning_rate": trial.suggest_loguniform("learning_rate", 0.005, 0.05),
         "colsample_bytree": trial.suggest_loguniform("colsample_bytree", 0.2, 0.6),

@@ -13,6 +13,7 @@ warnings.warn = warn
 
 from sklearn.preprocessing import LabelEncoder
 from sklearn.impute import SimpleImputer
+from sklearn.metrics import mean_squared_error
 
 
 def feature_engineer():
@@ -110,6 +111,9 @@ def train():
         params = pickle.dump(model, f)
 
     print("Training done and model saved to models/production/xgb_model.pickle")
+    print(
+        f"Training RMSE: {mean_squared_error(model.predict(x_train), y_train, squared=False)}"
+    )
 
 
 if __name__ == "__main__":
