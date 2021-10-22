@@ -15,6 +15,8 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_squared_error
 
+from predict import process
+
 
 def feature_engineer():
     # read in the data
@@ -92,10 +94,8 @@ def feature_engineer():
     return x_train, y_train
 
 
-def train():
+def train(x_train, y_train, x_valid, y_valid):
 
-    # engineer features
-    x_train, y_train = feature_engineer()
     # load best hyperparams from model_tuning.py
     with open("models/production/xgb_params.pickle", "rb") as f:
         params = pickle.load(f)
@@ -104,7 +104,11 @@ def train():
     model = xgb.XGBRegressor(**params)
     # train
     model.fit(
-        x_train, y_train,
+        x_train,
+        y_train,
+        eval_set=[(x_valid, y_valid)],
+        early_stopping_rounds=50,
+        verbose=False,
     )
 
     with open("models/production/xgb_model.pickle", "wb") as f:
@@ -114,7 +118,16 @@ def train():
     print(
         f"Training RMSE: {mean_squared_error(model.predict(x_train), y_train, squared=False)}"
     )
+    print(
+        f"Validation RMSE: {mean_squared_error(model.predict(x_valid), y_valid, squared=False)}"
+    )
 
 
 if __name__ == "__main__":
-    train()
+    # engineer features
+    x_train, y_train = feature_engineer()
+    # valid set
+    df_valid = pd.read_csv("input/data_test.csv")
+    x_valid, y_valid = process(df_valid).values, df_valid.kudos_count.values
+    # train xgb model
+    train(x_train, y_train, x_valid, y_valid)

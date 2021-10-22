@@ -90,7 +90,7 @@ def objective(trial, n_jobs=-1, random_state=42):
             x_train,
             y_train,
             eval_set=[(x_valid, y_valid)],
-            early_stopping_rounds=100,
+            early_stopping_rounds=50,
             verbose=False,
             callbacks=[pruning_callback],
         )
