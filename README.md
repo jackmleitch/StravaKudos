@@ -30,9 +30,9 @@ Using Python and the Strava API I was able to automate the data collection stage
 I looked at the distributions of the data and the value counts for the various categorical variables. Below are a few highlights. 
 
 <p float="left">
-  <img src="https://github.com/jackmleitch/StravaKudos/blob/main/input/images/pivot_table.png" width="250" />
-  <img src="https://github.com/jackmleitch/StravaKudos/blob/main/input/images/indexs.png" width="350" /> 
-  <img src="https://github.com/jackmleitch/StravaKudos/blob/main/input/images/corr.png" width="350" />
+  <img src="https://github.com/jackmleitch/StravaKudos/blob/main/input/images/pivot_table.png" width="200" />
+  <img src="https://github.com/jackmleitch/StravaKudos/blob/main/input/images/indexs.png" width="300" /> 
+  <img src="https://github.com/jackmleitch/StravaKudos/blob/main/input/images/corr.png" width="300" />
 </p>
 
 ## Data Cleaning and Feaure Engineering
