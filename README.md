@@ -1,4 +1,4 @@
-# Strava Kudos Predictor: Project Overview
+# Strava Kudos Predictor
 ## Project Overview
 * Created a tool that **predicts kudos** (a proxy for user interaction) on [Strava activities](https://www.strava.com/athletes/5028644) (RMSE: 9.41) to see if it was random or if different attributes impact kudos in different ways.
 * Attained over 4000 Strava activities using the **Strava API** and python.
