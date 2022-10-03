@@ -5,7 +5,7 @@
 * **Engineered new features** using domain knowledge. For example, features encapsulating different run types and times of day were added.
 * Performed **feature selection** using a combination of SHAP values and feature importance.
 * Optimized Linear (Lasso), Random Forest, and XGBoost Regressors using **Optuna** to reach the best model.
-* Built an **interactive API** application using Streamlit, which can be found [here](https://strava-kudos.herokuapp.com/).
+* Built an **interactive API** application using Streamlit, which can be found [here](https://strava-kudos.herokuapp.com/). (No longer running due to closure of Heroku free tier)
 
 ## Motivation
 Strava is a service for tracking human exercise which incorporates social network type features. It is mostly used for cycling and running, with an emphasis on using GPS data. I use Strava a lot as both a social media and to track my training. I've always been curious as to whether Kudos received on activities is inherently random, or if different attributes of that activity (e.g. run pace, or distance) affect Kudos in different ways. If I could build a Kudos prediction model that performed well on unseen data I would know that it isn't random! Also, this model would provide key insights into what different attributes affect kudos the most. 
